@@ -1,0 +1,120 @@
+---
+- name: Select the Linode DNS record name
+  ansible.builtin.set_fact:
+    common_dns_record_name: "{{ '' if subdomain == '@' else subdomain }}"
+
+- name: Find the Linode DNS zone
+  ansible.builtin.uri:
+    url: https://api.linode.com/v4/domains?page_size=500
+    method: GET
+    headers:
+      Authorization: "Bearer {{ token_password }}"
+      X-Filter: "{{ {'domain': domain} | to_json }}"
+    return_content: true
+    status_code: 200
+  register: common_linode_domains
+  no_log: true
+  when: token_password | length > 0
+
+- name: Require exactly one matching Linode DNS zone
+  ansible.builtin.assert:
+    that:
+      - common_linode_domains.json.data | length == 1
+    fail_msg: >-
+      The API token must have access to exactly one existing Linode DNS zone
+      named {{ domain }}.
+  when: token_password | length > 0
+
+- name: Select the Linode DNS zone ID
+  ansible.builtin.set_fact:
+    common_linode_domain_id: "{{ common_linode_domains.json.data[0].id }}"
+  no_log: true
+  when: token_password | length > 0
+
+- name: List existing records in the Linode DNS zone
+  ansible.builtin.uri:
+    url: >-
+      https://api.linode.com/v4/domains/{{ common_linode_domain_id }}/records?page_size=500
+    method: GET
+    headers:
+      Authorization: "Bearer {{ token_password }}"
+    return_content: true
+    status_code: 200
+  register: common_linode_domain_records
+  no_log: true
+  when: token_password | length > 0
+
+- name: Select matching A records
+  ansible.builtin.set_fact:
+    common_matching_a_records: >-
+      {{
+        common_linode_domain_records.json.data
+        | selectattr('type', 'equalto', 'A')
+        | selectattr('name', 'equalto', common_dns_record_name)
+        | list
+      }}
+  no_log: true
+  when: token_password | length > 0
+
+- name: Refuse to replace multi-value DNS
+  ansible.builtin.assert:
+    that:
+      - common_matching_a_records | length <= 1
+    fail_msg: >-
+      {{ netbird_fqdn }} has multiple A records in Linode DNS. Reconcile the
+      multi-value record before deploying NetBird so traffic cannot reach a
+      different server.
+  when: token_password | length > 0
+
+- name: Create the NetBird DNS A record
+  ansible.builtin.uri:
+    url: "https://api.linode.com/v4/domains/{{ common_linode_domain_id }}/records"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ token_password }}"
+    body_format: json
+    body:
+      type: A
+      name: "{{ common_dns_record_name }}"
+      target: "{{ ansible_facts.default_ipv4.address }}"
+      ttl_sec: 300
+    status_code:
+      - 200
+      - 201
+  no_log: true
+  when:
+    - token_password | length > 0
+    - common_matching_a_records | length == 0
+
+- name: Update the NetBird DNS A record
+  ansible.builtin.uri:
+    url: >-
+      https://api.linode.com/v4/domains/{{ common_linode_domain_id
+      }}/records/{{ common_matching_a_records[0].id }}
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ token_password }}"
+    body_format: json
+    body:
+      target: "{{ ansible_facts.default_ipv4.address }}"
+      ttl_sec: 300
+    status_code: 200
+  no_log: true
+  when:
+    - token_password | length > 0
+    - common_matching_a_records | length == 1
+    - common_matching_a_records[0].target != ansible_facts.default_ipv4.address
+
+- name: Wait for public DNS to point to this Linode
+  ansible.builtin.command:
+    argv:
+      - dig
+      - +short
+      - A
+      - "{{ netbird_fqdn }}"
+      - "@1.1.1.1"
+  register: common_netbird_dns_lookup
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: ansible_facts.default_ipv4.address in common_netbird_dns_lookup.stdout_lines

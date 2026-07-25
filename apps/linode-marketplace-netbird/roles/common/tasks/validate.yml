@@ -1,0 +1,52 @@
+---
+- name: Require Ubuntu 24.04 LTS
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Ubuntu'
+      - ansible_facts.distribution_version is version('24.04', '>=')
+      - ansible_facts.distribution_version is version('24.10', '<')
+    fail_msg: This Marketplace app supports Ubuntu 24.04 LTS only.
+
+- name: Validate the DNS zone
+  ansible.builtin.assert:
+    that:
+      - domain is match(
+          '^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}'
+          ~ '[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$'
+        )
+    fail_msg: DOMAIN must be a DNS zone such as example.com, without a scheme or path.
+
+- name: Validate the NetBird subdomain
+  ansible.builtin.assert:
+    that:
+      - subdomain == '@' or subdomain is match(
+          '^(?=.{1,190}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}'
+          ~ '[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}'
+          ~ '[A-Za-z0-9])?)*$'
+        )
+    fail_msg: SUBDOMAIN must be @ or a valid relative DNS name such as netbird.
+
+- name: Validate the Let's Encrypt email address
+  ansible.builtin.assert:
+    that:
+      - acme_email is match(
+          '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,63}$'
+        )
+    fail_msg: ACME_EMAIL must be a valid email address.
+
+- name: Validate the generated NetBird FQDN
+  ansible.builtin.assert:
+    that:
+      - netbird_fqdn | length <= 253
+    fail_msg: The resulting NetBird domain is longer than 253 characters.
+
+- name: Select the Docker package architecture
+  ansible.builtin.set_fact:
+    common_docker_apt_arch: >-
+      {{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts.architecture] | default('') }}
+
+- name: Require a supported Docker architecture
+  ansible.builtin.assert:
+    that:
+      - common_docker_apt_arch | length > 0
+    fail_msg: This app currently supports x86_64 and ARM64 Linodes.

@@ -1,0 +1,101 @@
+---
+- name: Validate the limited sudo username
+  ansible.builtin.assert:
+    that:
+      - username is match('^[a-z_][a-z0-9_-]{0,31}$')
+      - username not in ['root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp', 'mail', 'news']
+    fail_msg: >-
+      USER_NAME must be an unused Linux username containing only lowercase
+      letters, numbers, underscores, and hyphens.
+
+- name: Validate the optional SSH public key
+  ansible.builtin.assert:
+    that:
+      - >-
+        pubkey | length == 0 or pubkey is match(
+        '^(ssh-(rsa|ed25519)|ecdsa-sha2-nistp(256|384|521)|'
+        ~ 'sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\\.com) '
+        ~ '[A-Za-z0-9+/=]+(?: [^\\r\\n]+)?$'
+        )
+    fail_msg: PUBKEY must contain one valid OpenSSH public key on a single line.
+
+- name: Check whether the limited sudo user already exists
+  ansible.builtin.getent:
+    database: passwd
+
+- name: Refuse to reuse an unexpected existing account
+  ansible.builtin.assert:
+    that:
+      - username not in ansible_facts.getent_passwd
+        or ansible_facts.getent_passwd[username][4] == '/home/' ~ username
+    fail_msg: >-
+      The requested account already exists with an unexpected home directory.
+      Redeploy with a different USER_NAME.
+
+- name: Create or read the generated sudo password
+  ansible.builtin.set_fact:
+    provision_generated_sudo_password: >-
+      {{ lookup(
+        'ansible.builtin.password',
+        sudo_password_file ~ ' length=32 chars=ascii_letters,digits'
+      ) }}
+  no_log: true
+
+- name: Protect the generated password source
+  ansible.builtin.file:
+    path: "{{ sudo_password_file }}"
+    state: file
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Create the limited sudo user
+  ansible.builtin.user:
+    name: "{{ username }}"
+    comment: NetBird administrator
+    shell: /bin/bash
+    home: "/home/{{ username }}"
+    create_home: true
+    groups:
+      - sudo
+    append: true
+    password: "{{ provision_generated_sudo_password | password_hash('sha512') }}"
+    update_password: on_create
+    state: present
+  no_log: true
+
+- name: Create the limited user's SSH directory
+  ansible.builtin.file:
+    path: "/home/{{ username }}/.ssh"
+    state: directory
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: "0700"
+
+- name: Inspect root authorized keys
+  ansible.builtin.stat:
+    path: /root/.ssh/authorized_keys
+  register: provision_root_authorized_keys
+
+- name: Copy account SSH keys to the limited user
+  ansible.builtin.copy:
+    src: /root/.ssh/authorized_keys
+    remote_src: true
+    dest: "/home/{{ username }}/.ssh/authorized_keys"
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: "0600"
+  when:
+    - provision_root_authorized_keys.stat.exists
+    - provision_root_authorized_keys.stat.size | int > 0
+
+- name: Add the supplied SSH public key
+  ansible.builtin.lineinfile:
+    path: "/home/{{ username }}/.ssh/authorized_keys"
+    line: "{{ pubkey }}"
+    create: true
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: "0600"
+  when: pubkey | length > 0

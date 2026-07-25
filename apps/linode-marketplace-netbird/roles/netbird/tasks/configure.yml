@@ -1,0 +1,31 @@
+---
+- name: Render the NetBird dashboard environment
+  ansible.builtin.template:
+    src: dashboard.env.j2
+    dest: "{{ netbird_project_dir }}/dashboard.env"
+    owner: root
+    group: "{{ username }}"
+    mode: "0640"
+
+- name: Render the combined NetBird server configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ netbird_project_dir }}/config.yaml"
+    owner: root
+    group: "{{ username }}"
+    mode: "0640"
+  no_log: true
+
+- name: Render the NetBird Docker Compose project
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ netbird_project_dir }}/docker-compose.yml"
+    owner: root
+    group: "{{ username }}"
+    mode: "0640"
+
+- name: Validate the rendered Docker Compose project
+  ansible.builtin.command: docker compose config --quiet
+  args:
+    chdir: "{{ netbird_project_dir }}"
+  changed_when: false

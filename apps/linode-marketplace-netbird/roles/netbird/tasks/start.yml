@@ -1,0 +1,47 @@
+---
+- name: Pull the pinned NetBird and Traefik images
+  ansible.builtin.command: docker compose pull
+  args:
+    chdir: "{{ netbird_project_dir }}"
+  register: netbird_compose_pull
+  changed_when: >-
+    'Pulled' in netbird_compose_pull.stdout
+    or 'Downloaded' in netbird_compose_pull.stdout
+    or 'Pull complete' in netbird_compose_pull.stderr
+
+- name: Start the NetBird Compose project
+  ansible.builtin.command: docker compose up -d --remove-orphans
+  args:
+    chdir: "{{ netbird_project_dir }}"
+  register: netbird_compose_up
+  changed_when: >-
+    'Started' in netbird_compose_up.stderr
+    or 'Created' in netbird_compose_up.stderr
+    or 'Recreated' in netbird_compose_up.stderr
+
+- name: Wait for the embedded identity provider through Traefik
+  ansible.builtin.uri:
+    url: "https://{{ netbird_fqdn }}/oauth2/.well-known/openid-configuration"
+    method: GET
+    status_code: 200
+    validate_certs: true
+    timeout: 10
+  register: netbird_public_health
+  retries: 60
+  delay: 5
+  until: netbird_public_health.status | default(0) == 200
+
+- name: List running NetBird services
+  ansible.builtin.command: docker compose ps --status running --services
+  args:
+    chdir: "{{ netbird_project_dir }}"
+  register: netbird_running_services
+  changed_when: false
+
+- name: Require all NetBird services to be running
+  ansible.builtin.assert:
+    that:
+      - "'traefik' in netbird_running_services.stdout_lines"
+      - "'dashboard' in netbird_running_services.stdout_lines"
+      - "'netbird-server' in netbird_running_services.stdout_lines"
+    fail_msg: One or more NetBird containers are not running. Inspect docker compose logs in /opt/netbird.

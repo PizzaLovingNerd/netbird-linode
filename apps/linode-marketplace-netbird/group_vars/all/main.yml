@@ -1,0 +1,13 @@
+---
+username: "{{ lookup('ansible.builtin.env', 'USER_NAME') | default('netbirdadmin', true) }}"
+disable_root: "{{ (lookup('ansible.builtin.env', 'DISABLE_ROOT') | default('No', true)) == 'Yes' }}"
+pubkey: "{{ lookup('ansible.builtin.env', 'PUBKEY') | default('', true) }}"
+
+domain: "{{ lookup('ansible.builtin.env', 'DOMAIN') }}"
+subdomain: "{{ lookup('ansible.builtin.env', 'SUBDOMAIN') | default('netbird', true) }}"
+acme_email: "{{ lookup('ansible.builtin.env', 'ACME_EMAIL') }}"
+token_password: "{{ lookup('ansible.builtin.env', 'TOKEN_PASSWORD') | default('', true) }}"
+
+netbird_fqdn: "{{ domain if subdomain == '@' else subdomain ~ '.' ~ domain }}"
+netbird_project_dir: /opt/netbird
+sudo_password_file: /root/.netbird-marketplace-sudo-password

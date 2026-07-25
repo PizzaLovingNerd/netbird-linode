@@ -1,0 +1,87 @@
+---
+- name: Allow SSH through UFW
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow HTTP for the Let's Encrypt redirect and challenge
+  community.general.ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+
+- name: Allow NetBird HTTPS and gRPC traffic
+  community.general.ufw:
+    rule: allow
+    port: "443"
+    proto: tcp
+
+- name: Allow NetBird STUN traffic
+  community.general.ufw:
+    rule: allow
+    port: "3478"
+    proto: udp
+
+- name: Set the default incoming firewall policy
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Set the default outgoing firewall policy
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+- name: Enable the Fail2ban SSH jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      port = ssh
+      maxretry = 5
+      findtime = 10m
+      bantime = 10m
+
+- name: Enable and restart Fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: restarted
+
+- name: Inspect the limited user's authorized keys
+  ansible.builtin.stat:
+    path: "/home/{{ username }}/.ssh/authorized_keys"
+  register: common_limited_authorized_keys
+
+- name: Select the SSH password policy
+  ansible.builtin.set_fact:
+    common_password_authentication: >-
+      {{ not (
+        common_limited_authorized_keys.stat.exists
+        and common_limited_authorized_keys.stat.size | int > 0
+      ) }}
+
+- name: Configure SSH access policy
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-netbird-marketplace.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by the NetBird Linode Marketplace app.
+      {% if disable_root %}
+      PermitRootLogin no
+      {% endif %}
+      PubkeyAuthentication yes
+      PasswordAuthentication {{ 'yes' if common_password_authentication else 'no' }}
+  notify: Reload SSH

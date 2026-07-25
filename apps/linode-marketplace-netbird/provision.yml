@@ -1,0 +1,9 @@
+---
+- name: Provision the NetBird administrator account
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  any_errors_fatal: true
+  become: true
+  roles:
+    - role: provision

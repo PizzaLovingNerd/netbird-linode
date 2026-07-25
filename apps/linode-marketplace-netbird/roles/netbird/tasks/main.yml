@@ -1,0 +1,17 @@
+---
+- name: Create the NetBird project directory
+  ansible.builtin.file:
+    path: "{{ netbird_project_dir }}"
+    state: directory
+    owner: root
+    group: "{{ username }}"
+    mode: "0750"
+
+- name: Generate persistent NetBird secrets
+  ansible.builtin.import_tasks: secrets.yml
+
+- name: Render the NetBird deployment
+  ansible.builtin.import_tasks: configure.yml
+
+- name: Start and verify NetBird
+  ansible.builtin.import_tasks: start.yml

@@ -1,0 +1,6 @@
+*.retry
+.ansible/
+.cache/
+env/
+__pycache__/
+apps/linode-marketplace-netbird/group_vars/linode/vars

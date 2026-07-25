@@ -1,0 +1,9 @@
+---
+netbird_server_image: netbirdio/netbird-server:0.75.0
+netbird_dashboard_image: netbirdio/dashboard:v2.90.7
+netbird_traefik_image: traefik:v3.7.1
+
+netbird_stun_port: 3478
+netbird_traefik_ip: 172.30.0.10
+netbird_network_subnet: 172.30.0.0/24
+netbird_network_gateway: 172.30.0.1

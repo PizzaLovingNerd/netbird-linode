@@ -1,0 +1,12 @@
+---
+- name: Validate deployment inputs
+  ansible.builtin.import_tasks: validate.yml
+
+- name: Install and configure host packages
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Configure DNS
+  ansible.builtin.import_tasks: dns.yml
+
+- name: Configure host security
+  ansible.builtin.import_tasks: security.yml

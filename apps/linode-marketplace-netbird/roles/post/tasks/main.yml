@@ -1,0 +1,30 @@
+---
+- name: Read the generated sudo password
+  ansible.builtin.set_fact:
+    post_generated_sudo_password: "{{ lookup('ansible.builtin.file', sudo_password_file) | trim }}"
+  no_log: true
+
+- name: Write deployment credentials and access details
+  ansible.builtin.template:
+    src: credentials.j2
+    dest: "/home/{{ username }}/.credentials"
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: "0600"
+  no_log: true
+
+- name: Install the NetBird Marketplace MOTD
+  ansible.builtin.template:
+    src: motd.j2
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Show the deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "NetBird is ready at https://{{ netbird_fqdn }}"
+      - "Create the first NetBird administrator in the browser setup wizard."
+      - "Deployment files: {{ netbird_project_dir }}"
+      - "Credentials and access notes: /home/{{ username }}/.credentials"

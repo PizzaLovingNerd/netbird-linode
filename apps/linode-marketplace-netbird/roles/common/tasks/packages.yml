@@ -1,0 +1,83 @@
+---
+- name: Set the system hostname
+  ansible.builtin.hostname:
+    name: "{{ netbird_fqdn }}"
+
+- name: Update the apt package index
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade installed system packages
+  ansible.builtin.apt:
+    upgrade: full
+
+- name: Install host security and repository dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - dnsutils
+      - fail2ban
+      - gnupg
+      - openssl
+      - python3-debian
+      - ufw
+    state: present
+
+- name: Create the apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker's apt signing key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure Docker's stable apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ common_docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu
+      {{ ansible_facts.distribution_release }} stable
+    filename: docker
+    state: present
+
+- name: Install Docker Engine and Compose
+  ansible.builtin.apt:
+    name:
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-ce
+      - docker-ce-cli
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Grant the limited user access to Docker
+  ansible.builtin.user:
+    name: "{{ username }}"
+    groups:
+      - docker
+    append: true
+
+- name: Verify Docker Engine
+  ansible.builtin.command: docker info
+  changed_when: false
+
+- name: Verify Docker Compose
+  ansible.builtin.command: docker compose version
+  changed_when: false
