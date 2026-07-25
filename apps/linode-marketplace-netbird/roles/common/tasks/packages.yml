@@ -1,4 +1,9 @@
 ---
+- name: Select the Docker package architecture
+  ansible.builtin.set_fact:
+    common_docker_apt_arch: >-
+      {{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts.architecture] }}
+
 - name: Set the system hostname
   ansible.builtin.hostname:
     name: "{{ netbird_fqdn }}"
@@ -12,6 +17,11 @@
   ansible.builtin.apt:
     upgrade: full
 
+- name: Check whether the system requires a reboot
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: common_reboot_required
+
 - name: Install host security and repository dependencies
   ansible.builtin.apt:
     name:
@@ -20,8 +30,11 @@
       - dnsutils
       - fail2ban
       - gnupg
+      - iptables
+      - openssh-client
       - openssl
       - python3-debian
+      - unattended-upgrades
       - ufw
     state: present
 
@@ -40,6 +53,10 @@
     owner: root
     group: root
     mode: "0644"
+  register: common_docker_signing_key
+  retries: 3
+  delay: 5
+  until: common_docker_signing_key is succeeded
 
 - name: Configure Docker's stable apt repository
   ansible.builtin.apt_repository:
@@ -67,12 +84,12 @@
     enabled: true
     state: started
 
-- name: Grant the limited user access to Docker
+- name: Keep the limited administrator out of the Docker group
   ansible.builtin.user:
     name: "{{ username }}"
     groups:
-      - docker
-    append: true
+      - sudo
+    append: false
 
 - name: Verify Docker Engine
   ansible.builtin.command: docker info

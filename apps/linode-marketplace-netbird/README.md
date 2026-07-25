@@ -5,8 +5,9 @@ secure WireGuard-based overlay. This Marketplace app deploys a self-hosted
 NetBird control plane on one Linode using the current combined server, embedded
 identity provider, web dashboard, and an internal Traefik reverse proxy.
 Traefik obtains and renews a Let's Encrypt certificate automatically. The app
-also creates a limited sudo account, configures Docker, UFW, and Fail2ban, and
-can create the required A record when a Linode API token is supplied. The
+also creates a limited sudo account, configures Docker-aware firewall rules,
+UFW, and Fail2ban, and can create the required A record when a Linode API token
+is supplied. The
 deployment intentionally stays small: it does not install an external identity
 provider, external proxy, CrowdSec, or NetBird's optional application reverse
 proxy.
@@ -35,7 +36,7 @@ Suggested plan: a Shared CPU plan with at least 2 GB RAM.
 | Let's Encrypt email | Yes | Certificate expiration and account notices |
 | Linode API token | No | Creates the A record when the zone uses Linode DNS |
 | Limited sudo username | Yes | Administrative Linux account |
-| Disable root SSH | Yes | Selects whether SSH permits direct root login |
+| Disable root SSH | Yes | Disables direct root SSH by default after validating Linode's injected key |
 
 When the API token is omitted, the requested FQDN must already resolve to the
 new Linode's public IPv4 address. Provisioning waits for public DNS before
@@ -43,6 +44,15 @@ starting Traefik so certificate issuance cannot silently fail.
 
 Select an account SSH key in the Linode creation form. Linode injects selected
 keys into the root account, and the app copies them to the limited sudo user.
+The deployment stops before changing the system if root SSH would be disabled
+without an injected key. The limited user receives sudo access but is not added
+to the privileged `docker` group.
+
+Before provisioning, the app validates root privileges, Ubuntu release,
+architecture, memory, disk space, input formats, SSH-key availability, and
+Linode DNS access and delegation. Public A-record propagation must agree on
+Cloudflare and Google DNS; the app waits up to 15 minutes and reports what each
+resolver returned.
 
 ## Network ports
 
@@ -56,8 +66,14 @@ keys into the root account, and the app copies them to the limited sudo user.
 - `/opt/netbird/docker-compose.yml`
 - `/opt/netbird/config.yaml`
 - `/opt/netbird/dashboard.env`
+- `/usr/local/sbin/netbird-docker-firewall`
+- `/etc/systemd/system/netbird-docker-firewall.service`
 - `/home/<sudo-user>/.credentials`
 - `/var/log/stackscript.log`
+
+All three Compose services have ongoing health checks. Initial deployment uses
+Compose's wait mode and verifies the public dashboard, API route, embedded
+identity provider, and trusted TLS certificate before reporting success.
 
 The first NetBird administrator is not pre-generated. Open the deployed URL and
 create it in NetBird's secure first-run browser wizard.

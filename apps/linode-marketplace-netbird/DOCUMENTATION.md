@@ -50,19 +50,26 @@ Traefik container that handles public HTTPS and gRPC traffic.
 - **Limited sudo username:** The non-root Linux administrator created by the
   deployment.
 - **Disable root access over SSH:** Prevents direct root SSH logins when set to
-  `Yes`.
+  `Yes`. This is enabled by default.
 
 Select an account SSH key in the Linode creation form. Linode injects selected
 keys into the root account, and the app copies them to the limited sudo user.
 If the limited user receives at least one authorized key, the app disables SSH
-password authentication. Otherwise, password authentication remains enabled.
+password authentication. The preflight check refuses to disable root SSH when
+Linode did not inject a key, preventing an SSH lockout. The limited account uses
+`sudo` for Docker commands and is deliberately not a member of the root-
+equivalent `docker` group.
 
 ## Deployment
 
 Create a Compute Instance from the NetBird Marketplace app, fill in the fields,
-and deploy. Installation normally takes 5–10 minutes after the instance boots.
-The app waits for public DNS, obtains a trusted certificate, and verifies the
-embedded identity provider before it reports success.
+and deploy. Installation normally takes 5–10 minutes after the instance boots,
+plus any DNS propagation wait. Before provisioning NetBird or changing security
+policy, the app validates the OS, architecture, memory, disk, inputs, SSH key,
+API token, DNS zone, and Linode nameserver delegation. The app then waits up to
+15 minutes for both Cloudflare and Google public DNS to return the instance IPv4
+address, obtains a trusted certificate, and verifies the containers, dashboard,
+API route, and embedded identity provider before it reports success.
 
 Provisioning output is written to:
 
@@ -70,8 +77,9 @@ Provisioning output is written to:
 /var/log/stackscript.log
 ```
 
-If deployment stops at the DNS task, verify that the requested hostname's A
-record matches the instance's public IPv4 address.
+If deployment stops at the DNS task, its error shows the expected IPv4 address
+and the records returned by each resolver. Verify registrar nameserver
+delegation, the requested A record, and DNSSEC configuration.
 
 ## Access NetBird
 
@@ -104,6 +112,9 @@ cd /opt/netbird
 sudo docker compose ps
 ```
 
+The `STATUS` column should show each service as healthy. Docker reruns these
+checks continuously.
+
 View logs:
 
 ```bash
@@ -129,6 +140,17 @@ UFW allows only these inbound ports:
 | 443 | TCP | NetBird HTTPS, gRPC, WebSocket, and relay |
 | 3478 | UDP | NetBird STUN |
 
+Docker can bypass ordinary UFW forwarding rules, so the app also installs
+`netbird-docker-firewall.service`. Its dedicated `DOCKER-USER` chain permits
+only `80/tcp`, `443/tcp`, and `3478/udp` to the fixed `netbird0` bridge and
+drops other public ingress to that bridge. Check it with:
+
+```bash
+sudo systemctl status netbird-docker-firewall
+sudo iptables -S DOCKER-USER
+sudo iptables -S NETBIRD-FILTER
+```
+
 The optional NetBird application reverse proxy is not installed, so this app
 does not open `51820/udp` or configure wildcard application domains.
 
@@ -143,6 +165,10 @@ cd /opt/netbird
 sudo docker compose pull
 sudo docker compose up -d
 ```
+
+If the package upgrade created `/var/run/reboot-required`, the deployment
+summary, MOTD, and `.credentials` file say so. Confirm limited-user SSH access
+before rebooting.
 
 Verify the deployment afterward:
 

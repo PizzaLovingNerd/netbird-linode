@@ -14,6 +14,9 @@
     status_code: 200
   register: common_linode_domains
   no_log: true
+  retries: 3
+  delay: 5
+  until: common_linode_domains is succeeded
   when: token_password | length > 0
 
 - name: Require exactly one matching Linode DNS zone
@@ -42,6 +45,9 @@
     status_code: 200
   register: common_linode_domain_records
   no_log: true
+  retries: 3
+  delay: 5
+  until: common_linode_domain_records is succeeded
   when: token_password | length > 0
 
 - name: Select matching A records
@@ -66,55 +72,107 @@
       different server.
   when: token_password | length > 0
 
-- name: Create the NetBird DNS A record
-  ansible.builtin.uri:
-    url: "https://api.linode.com/v4/domains/{{ common_linode_domain_id }}/records"
-    method: POST
-    headers:
-      Authorization: "Bearer {{ token_password }}"
-    body_format: json
-    body:
-      type: A
-      name: "{{ common_dns_record_name }}"
-      target: "{{ ansible_facts.default_ipv4.address }}"
-      ttl_sec: 300
-    status_code:
-      - 200
-      - 201
-  no_log: true
+- name: Create a missing NetBird DNS record
   when:
     - token_password | length > 0
     - common_matching_a_records | length == 0
+  block:
+    - name: Create the NetBird DNS A record
+      ansible.builtin.uri:
+        url: "https://api.linode.com/v4/domains/{{ common_linode_domain_id }}/records"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ token_password }}"
+        body_format: json
+        body:
+          type: A
+          name: "{{ common_dns_record_name }}"
+          target: "{{ ansible_facts.default_ipv4.address }}"
+          ttl_sec: 300
+        status_code:
+          - 200
+          - 201
+      no_log: true
+  rescue:
+    - name: Explain a Linode DNS record creation failure
+      ansible.builtin.fail:
+        msg: >-
+          Linode DNS could not create the A record for {{ netbird_fqdn }}.
+          Confirm that the API token has Domains read/write access and that no
+          conflicting record exists, then rerun the StackScript.
 
-- name: Update the NetBird DNS A record
-  ansible.builtin.uri:
-    url: >-
-      https://api.linode.com/v4/domains/{{ common_linode_domain_id
-      }}/records/{{ common_matching_a_records[0].id }}
-    method: PUT
-    headers:
-      Authorization: "Bearer {{ token_password }}"
-    body_format: json
-    body:
-      target: "{{ ansible_facts.default_ipv4.address }}"
-      ttl_sec: 300
-    status_code: 200
-  no_log: true
+- name: Repoint an existing NetBird DNS record
   when:
     - token_password | length > 0
     - common_matching_a_records | length == 1
     - common_matching_a_records[0].target != ansible_facts.default_ipv4.address
+  block:
+    - name: Update the NetBird DNS A record
+      ansible.builtin.uri:
+        url: >-
+          https://api.linode.com/v4/domains/{{ common_linode_domain_id
+          }}/records/{{ common_matching_a_records[0].id }}
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ token_password }}"
+        body_format: json
+        body:
+          target: "{{ ansible_facts.default_ipv4.address }}"
+          ttl_sec: 300
+        status_code: 200
+      no_log: true
+      register: common_linode_record_update
+      retries: 3
+      delay: 5
+      until: common_linode_record_update is succeeded
+  rescue:
+    - name: Explain a Linode DNS record update failure
+      ansible.builtin.fail:
+        msg: >-
+          Linode DNS could not update the A record for {{ netbird_fqdn }}.
+          Confirm that the API token has Domains read/write access and that
+          the zone is writable, then rerun the StackScript.
 
-- name: Wait for public DNS to point to this Linode
+- name: Wait for public DNS resolvers to point to this Linode
   ansible.builtin.command:
     argv:
       - dig
       - +short
       - A
       - "{{ netbird_fqdn }}"
-      - "@1.1.1.1"
-  register: common_netbird_dns_lookup
+      - "@{{ item }}"
+  loop:
+    - 1.1.1.1
+    - 8.8.8.8
+  loop_control:
+    label: "{{ item }}"
+  register: common_netbird_dns_lookups
   changed_when: false
-  retries: 30
+  failed_when: false
+  retries: 90
   delay: 10
-  until: ansible_facts.default_ipv4.address in common_netbird_dns_lookup.stdout_lines
+  until: >-
+    ansible_facts.default_ipv4.address
+    in common_netbird_dns_lookups.stdout_lines | default([])
+
+- name: Require public DNS to point to this Linode
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - ansible_facts.default_ipv4.address in item.stdout_lines
+    fail_msg: >-
+      {{ netbird_fqdn }} did not resolve to
+      {{ ansible_facts.default_ipv4.address }} through resolver
+      {{ item.item }} within 15 minutes. It returned
+      {{ item.stdout_lines | default([]) | join(', ') | default('no A records', true) }}.
+      Verify the authoritative nameservers, A record, and DNSSEC configuration,
+      then rerun the StackScript.
+  loop: "{{ common_netbird_dns_lookups.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Show confirmed public DNS
+  ansible.builtin.debug:
+    msg: >-
+      {{ netbird_fqdn }} resolves to {{ ansible_facts.default_ipv4.address }}
+      through Cloudflare (1.1.1.1) and Google (8.8.8.8).

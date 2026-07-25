@@ -12,6 +12,7 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=netbird
+      - --ping=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.websecure.allowACMEByPass=true
@@ -26,8 +27,8 @@ services:
       - --serverstransport.forwardingtimeouts.responseheadertimeout=0s
       - --serverstransport.forwardingtimeouts.idleconntimeout=0s
     ports:
-      - "80:80"
-      - "443:443"
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - netbird_traefik_letsencrypt:/letsencrypt
@@ -36,6 +37,12 @@ services:
       options:
         max-size: 100m
         max-file: "3"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   dashboard:
     image: "{{ netbird_dashboard_image }}"
@@ -59,6 +66,12 @@ services:
       options:
         max-size: 100m
         max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   netbird-server:
     image: "{{ netbird_server_image }}"
@@ -67,7 +80,7 @@ services:
     networks:
       - netbird
     ports:
-      - "{{ netbird_stun_port }}:{{ netbird_stun_port }}/udp"
+      - "0.0.0.0:{{ netbird_stun_port }}:{{ netbird_stun_port }}/udp"
     volumes:
       - netbird_data:/var/lib/netbird
       - ./config.yaml:/etc/netbird/config.yaml:ro
@@ -103,6 +116,19 @@ services:
       options:
         max-size: 100m
         max-file: "3"
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health HTTP/1.0\r\n\r\n' >&3 &&
+          grep -q '200 OK' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
 
 volumes:
   netbird_data:
@@ -112,6 +138,8 @@ networks:
   netbird:
     name: netbird
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: netbird0
     ipam:
       config:
         - subnet: "{{ netbird_network_subnet }}"

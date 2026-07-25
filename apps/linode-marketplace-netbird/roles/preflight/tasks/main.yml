@@ -1,0 +1,249 @@
+---
+- name: Require root privileges
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.user_id == 'root'
+    fail_msg: The NetBird deployment must run as root.
+
+- name: Require a supported Ubuntu LTS release
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Ubuntu'
+      - ansible_facts.distribution_version in ['24.04', '26.04']
+    fail_msg: This Marketplace app supports Ubuntu 24.04 and 26.04 LTS only.
+
+- name: Select the Docker package architecture
+  ansible.builtin.set_fact:
+    preflight_docker_apt_arch: >-
+      {{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts.architecture] | default('') }}
+
+- name: Require a supported Docker architecture
+  ansible.builtin.assert:
+    that:
+      - preflight_docker_apt_arch | length > 0
+    fail_msg: This app currently supports x86_64 and ARM64 Linodes.
+
+- name: Require at least 2 GB of system memory
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.memtotal_mb | int >= 1800
+    fail_msg: NetBird requires a Linode plan with at least 2 GB RAM.
+
+- name: Read available root filesystem space
+  ansible.builtin.command:
+    argv:
+      - df
+      - --output=avail
+      - -k
+      - /
+  register: preflight_root_disk
+  changed_when: false
+
+- name: Require at least 8 GB of free disk space
+  ansible.builtin.assert:
+    that:
+      - preflight_root_disk.stdout_lines[-1] | trim | int >= 8388608
+    fail_msg: NetBird requires at least 8 GB of free disk space.
+
+- name: Validate the limited sudo username
+  ansible.builtin.assert:
+    that:
+      - username is match('^[a-z_][a-z0-9_-]{0,31}$')
+      - username not in ['root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp', 'mail', 'news']
+    fail_msg: >-
+      USER_NAME must be an unused Linux username containing only lowercase
+      letters, numbers, underscores, and hyphens.
+
+- name: Validate the DNS zone
+  ansible.builtin.assert:
+    that:
+      - domain is match(
+          '^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}'
+          ~ '[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$'
+        )
+    fail_msg: DOMAIN must be a DNS zone such as example.com, without a scheme or path.
+
+- name: Validate the NetBird subdomain
+  ansible.builtin.assert:
+    that:
+      - subdomain == '@' or subdomain is match(
+          '^(?=.{1,190}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}'
+          ~ '[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}'
+          ~ '[A-Za-z0-9])?)*$'
+        )
+    fail_msg: SUBDOMAIN must be @ or a valid relative DNS name such as netbird.
+
+- name: Validate the Let's Encrypt email address
+  ansible.builtin.assert:
+    that:
+      - acme_email is match(
+          '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$'
+        )
+    fail_msg: ACME_EMAIL must be a valid email address.
+
+- name: Validate the generated NetBird FQDN
+  ansible.builtin.assert:
+    that:
+      - netbird_fqdn | length <= 253
+    fail_msg: The resulting NetBird domain is longer than 253 characters.
+
+- name: Inspect Linode-injected root SSH keys
+  ansible.builtin.stat:
+    path: /root/.ssh/authorized_keys
+  register: preflight_root_authorized_keys
+
+- name: Prevent an SSH lockout when root access is disabled
+  ansible.builtin.assert:
+    that:
+      - preflight_root_authorized_keys.stat.exists
+      - preflight_root_authorized_keys.stat.size | int > 0
+    fail_msg: >-
+      Root SSH access cannot be disabled because Linode did not inject an
+      account SSH key. Select an SSH key in the Linode Security section or
+      set Disable root access over SSH to No.
+  when: disable_root
+
+- name: Validate the Linode-injected root SSH keys
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -l
+      - -f
+      - /root/.ssh/authorized_keys
+  register: preflight_root_authorized_keys_validation
+  changed_when: false
+  failed_when: false
+  when: disable_root
+
+- name: Require at least one valid Linode-injected SSH key
+  ansible.builtin.assert:
+    that:
+      - preflight_root_authorized_keys_validation.rc == 0
+      - preflight_root_authorized_keys_validation.stdout | length > 0
+    fail_msg: >-
+      Root SSH access cannot be disabled because the injected authorized_keys
+      file does not contain a valid SSH public key. Select an account SSH key
+      in Linode and redeploy.
+  when: disable_root
+
+- name: Check Linode DNS zone access
+  ansible.builtin.uri:
+    url: https://api.linode.com/v4/domains?page_size=500
+    method: GET
+    headers:
+      Authorization: "Bearer {{ token_password }}"
+      X-Filter: "{{ {'domain': domain} | to_json }}"
+    return_content: true
+    status_code:
+      - 200
+      - 401
+      - 403
+  register: preflight_linode_domains
+  no_log: true
+  retries: 3
+  delay: 5
+  until: preflight_linode_domains.status | default(0) in [200, 401, 403]
+  when: token_password | length > 0
+
+- name: Require access to exactly one Linode DNS zone
+  ansible.builtin.assert:
+    that:
+      - preflight_linode_domains.status == 200
+      - preflight_linode_domains.json.data | default([]) | length == 1
+    fail_msg: >-
+      The API token needs Domains read/write access to exactly one existing
+      Linode DNS zone named {{ domain }}.
+  when: token_password | length > 0
+
+- name: Query public DNS delegation
+  ansible.builtin.command:
+    argv:
+      - dig
+      - +short
+      - NS
+      - "{{ domain }}"
+      - "@{{ item }}"
+  loop:
+    - 1.1.1.1
+    - 8.8.8.8
+  register: preflight_dns_delegation
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 10
+  until: >-
+    preflight_dns_delegation.stdout_lines
+    | select('match', '^ns[1-5]\.linode\.com\.$')
+    | list
+    | length > 0
+  when: token_password | length > 0
+
+- name: Require public delegation to Linode DNS
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - >-
+        item.stdout_lines
+        | select('match', '^ns[1-5]\.linode\.com\.$')
+        | list
+        | length > 0
+    fail_msg: >-
+      {{ domain }} is not delegated to Linode DNS according to resolver
+      {{ item.item }}. Update the registrar nameservers before deploying.
+      Observed nameservers: {{ item.stdout_lines | default([]) | join(', ') | default('none', true) }}
+  loop: "{{ preflight_dns_delegation.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: token_password | length > 0
+
+- name: Wait for pre-existing external DNS records
+  ansible.builtin.command:
+    argv:
+      - dig
+      - +short
+      - A
+      - "{{ netbird_fqdn }}"
+      - "@{{ item }}"
+  loop:
+    - 1.1.1.1
+    - 8.8.8.8
+  loop_control:
+    label: "{{ item }}"
+  register: preflight_external_dns
+  changed_when: false
+  failed_when: false
+  retries: 90
+  delay: 10
+  until: >-
+    ansible_facts.default_ipv4.address
+    in preflight_external_dns.stdout_lines | default([])
+  when: token_password | length == 0
+
+- name: Require pre-existing external DNS records
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - ansible_facts.default_ipv4.address in item.stdout_lines
+    fail_msg: >-
+      {{ netbird_fqdn }} did not resolve to
+      {{ ansible_facts.default_ipv4.address }} through resolver
+      {{ item.item }} within 15 minutes. It returned
+      {{ item.stdout_lines | default([]) | join(', ') | default('no A records', true) }}.
+      Create or correct the A record at your DNS provider, then rerun the
+      StackScript.
+  loop: "{{ preflight_external_dns.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: token_password | length == 0
+
+- name: Show the validated deployment target
+  ansible.builtin.debug:
+    msg:
+      - "NetBird hostname: {{ netbird_fqdn }}"
+      - "Expected public IPv4: {{ ansible_facts.default_ipv4.address }}"
+      - >-
+        DNS mode: {{
+          'Linode API managed'
+          if token_password | length > 0
+          else 'pre-existing external DNS record'
+        }}

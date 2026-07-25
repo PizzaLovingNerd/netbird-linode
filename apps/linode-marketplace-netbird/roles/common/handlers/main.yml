@@ -9,3 +9,11 @@
     name: ssh
     state: reloaded
   listen: Reload SSH
+
+- name: Reload NetBird Docker firewall
+  ansible.builtin.systemd_service:
+    name: netbird-docker-firewall
+    enabled: true
+    state: restarted
+    daemon_reload: true
+  listen: Reload NetBird Docker firewall

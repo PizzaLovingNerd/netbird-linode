@@ -4,13 +4,17 @@
   args:
     chdir: "{{ netbird_project_dir }}"
   register: netbird_compose_pull
+  retries: 3
+  delay: 10
+  until: netbird_compose_pull.rc == 0
   changed_when: >-
     'Pulled' in netbird_compose_pull.stdout
     or 'Downloaded' in netbird_compose_pull.stdout
     or 'Pull complete' in netbird_compose_pull.stderr
 
 - name: Start the NetBird Compose project
-  ansible.builtin.command: docker compose up -d --remove-orphans
+  ansible.builtin.command: >-
+    docker compose up -d --remove-orphans --wait --wait-timeout 300
   args:
     chdir: "{{ netbird_project_dir }}"
   register: netbird_compose_up
@@ -30,6 +34,32 @@
   retries: 60
   delay: 5
   until: netbird_public_health.status | default(0) == 200
+
+- name: Verify the public NetBird API route
+  ansible.builtin.uri:
+    url: "https://{{ netbird_fqdn }}/api/users"
+    method: GET
+    status_code:
+      - 401
+      - 403
+    validate_certs: true
+    timeout: 10
+  register: netbird_public_api
+  retries: 60
+  delay: 5
+  until: netbird_public_api.status | default(0) in [401, 403]
+
+- name: Verify the public NetBird dashboard
+  ansible.builtin.uri:
+    url: "https://{{ netbird_fqdn }}/"
+    method: GET
+    status_code: 200
+    validate_certs: true
+    timeout: 10
+  register: netbird_public_dashboard
+  retries: 60
+  delay: 5
+  until: netbird_public_dashboard.status | default(0) == 200
 
 - name: List running NetBird services
   ansible.builtin.command: docker compose ps --status running --services

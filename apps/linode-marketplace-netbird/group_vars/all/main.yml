@@ -1,6 +1,6 @@
 ---
 username: "{{ lookup('ansible.builtin.env', 'USER_NAME') | default('netbirdadmin', true) }}"
-disable_root: "{{ (lookup('ansible.builtin.env', 'DISABLE_ROOT') | default('No', true)) == 'Yes' }}"
+disable_root: "{{ (lookup('ansible.builtin.env', 'DISABLE_ROOT') | default('Yes', true)) == 'Yes' }}"
 
 domain: "{{ lookup('ansible.builtin.env', 'DOMAIN') }}"
 subdomain: "{{ lookup('ansible.builtin.env', 'SUBDOMAIN') | default('netbird', true) }}"

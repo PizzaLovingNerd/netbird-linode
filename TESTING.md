@@ -73,14 +73,19 @@ cd /opt/netbird
 sudo docker compose ps
 sudo docker compose logs --tail=200
 sudo ufw status verbose
+sudo systemctl status netbird-docker-firewall --no-pager
+sudo iptables -S NETBIRD-FILTER
 sudo ss -lntup
 ```
 
 The test passes when:
 
-- `netbird-server`, `dashboard`, and `traefik` are running
+- `netbird-server`, `dashboard`, and `traefik` are running and healthy
 - the OIDC request succeeds with a trusted HTTPS certificate
 - UFW permits `22/tcp`, `80/tcp`, `443/tcp`, and `3478/udp`
+- the `NETBIRD-FILTER` chain allows only the published NetBird ports from the
+  public interface to the `netbird0` bridge
+- the limited user is not a member of the `docker` group
 - no unexpected public application ports are listening
 - `https://netbird-test.example.com/setup` displays the first-admin wizard
 

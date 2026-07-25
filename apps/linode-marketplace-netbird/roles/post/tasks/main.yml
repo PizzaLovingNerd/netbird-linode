@@ -28,3 +28,9 @@
       - "Create the first NetBird administrator in the browser setup wizard."
       - "Deployment files: {{ netbird_project_dir }}"
       - "Credentials and access notes: /home/{{ username }}/.credentials"
+      - >-
+        Reboot required: {{
+          'Yes; reboot after confirming limited-user SSH access.'
+          if common_reboot_required.stat.exists
+          else 'No'
+        }}

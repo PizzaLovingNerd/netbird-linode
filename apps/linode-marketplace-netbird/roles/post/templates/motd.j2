@@ -6,4 +6,7 @@ Deployment: {{ netbird_project_dir }}
 Access notes: /home/{{ username }}/.credentials
 
 Create the first NetBird administrator in the browser wizard.
+{% if common_reboot_required.stat.exists %}
+Reboot required: confirm limited-user SSH access, then run sudo reboot.
+{% endif %}
 ************************************************************

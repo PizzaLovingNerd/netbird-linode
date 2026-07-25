@@ -23,6 +23,7 @@ deployment_scripts/linode-marketplace-netbird/
   linode-config.sh        CI deployment defaults
   test-vars.sh            Local/CI UDF defaults
 apps/linode-marketplace-netbird/
+  preflight.yml           Read-only host, input, SSH-key, and DNS checks
   provision.yml           Limited-user provisioning
   site.yml                Host and NetBird installation
   roles/                  Self-contained Ansible roles

@@ -20,7 +20,7 @@
 - name: Allow NetBird STUN traffic
   community.general.ufw:
     rule: allow
-    port: "3478"
+    port: "{{ netbird_stun_port | string }}"
     proto: udp
 
 - name: Set the default incoming firewall policy
@@ -36,6 +36,34 @@
 - name: Enable UFW
   community.general.ufw:
     state: enabled
+
+- name: Install the NetBird Docker firewall script
+  ansible.builtin.template:
+    src: netbird-docker-firewall.sh.j2
+    dest: /usr/local/sbin/netbird-docker-firewall
+    owner: root
+    group: root
+    mode: "0750"
+  notify: Reload NetBird Docker firewall
+
+- name: Install the NetBird Docker firewall service
+  ansible.builtin.template:
+    src: netbird-docker-firewall.service.j2
+    dest: /etc/systemd/system/netbird-docker-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload NetBird Docker firewall
+
+- name: Enable the NetBird Docker firewall service
+  ansible.builtin.systemd_service:
+    name: netbird-docker-firewall
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply pending Docker firewall changes
+  ansible.builtin.meta: flush_handlers
 
 - name: Enable the Fail2ban SSH jail
   ansible.builtin.copy:
@@ -63,12 +91,27 @@
     path: "/home/{{ username }}/.ssh/authorized_keys"
   register: common_limited_authorized_keys
 
+- name: Validate the limited user's authorized keys
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -l
+      - -f
+      - "/home/{{ username }}/.ssh/authorized_keys"
+  register: common_limited_authorized_keys_validation
+  changed_when: false
+  failed_when: false
+  when:
+    - common_limited_authorized_keys.stat.exists
+    - common_limited_authorized_keys.stat.size | int > 0
+
 - name: Select the SSH password policy
   ansible.builtin.set_fact:
     common_password_authentication: >-
       {{ not (
         common_limited_authorized_keys.stat.exists
         and common_limited_authorized_keys.stat.size | int > 0
+        and common_limited_authorized_keys_validation.rc | default(1) == 0
       ) }}
 
 - name: Configure SSH access policy

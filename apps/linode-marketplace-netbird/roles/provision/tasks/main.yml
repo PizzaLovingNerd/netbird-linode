@@ -1,13 +1,4 @@
 ---
-- name: Validate the limited sudo username
-  ansible.builtin.assert:
-    that:
-      - username is match('^[a-z_][a-z0-9_-]{0,31}$')
-      - username not in ['root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp', 'mail', 'news']
-    fail_msg: >-
-      USER_NAME must be an unused Linux username containing only lowercase
-      letters, numbers, underscores, and hyphens.
-
 - name: Check whether the limited sudo user already exists
   ansible.builtin.getent:
     database: passwd
