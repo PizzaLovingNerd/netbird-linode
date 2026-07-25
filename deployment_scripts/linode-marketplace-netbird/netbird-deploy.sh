@@ -16,7 +16,7 @@ set -Eeuo pipefail
 #<UDF name="disable_root" label="Disable root access over SSH?" oneOf="Yes,No" default="No">
 #<UDF name="pubkey" label="SSH public key for the limited sudo user (optional)" default="">
 
-readonly DEFAULT_GIT_REPO="https://github.com/PizzaLovingNerd/NetBird-linode.git"
+readonly DEFAULT_GIT_REPO="https://github.com/PizzaLovingNerd/netbird-linode.git"
 readonly REPO_URL="${GIT_REPO:-${DEFAULT_GIT_REPO}}"
 readonly REPO_BRANCH="${BRANCH:-main}"
 readonly WORK_DIR="/tmp/netbird-linode-marketplace"
