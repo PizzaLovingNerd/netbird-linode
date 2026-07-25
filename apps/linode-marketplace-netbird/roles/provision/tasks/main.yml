@@ -8,17 +8,6 @@
       USER_NAME must be an unused Linux username containing only lowercase
       letters, numbers, underscores, and hyphens.
 
-- name: Validate the optional SSH public key
-  ansible.builtin.assert:
-    that:
-      - >-
-        pubkey | length == 0 or pubkey is match(
-        '^(ssh-(rsa|ed25519)|ecdsa-sha2-nistp(256|384|521)|'
-        ~ 'sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\\.com) '
-        ~ '[A-Za-z0-9+/=]+(?: [^\\r\\n]+)?$'
-        )
-    fail_msg: PUBKEY must contain one valid OpenSSH public key on a single line.
-
 - name: Check whether the limited sudo user already exists
   ansible.builtin.getent:
     database: passwd
@@ -102,13 +91,3 @@
   when:
     - provision_root_authorized_keys.stat.exists
     - provision_root_authorized_keys.stat.size | int > 0
-
-- name: Add the supplied SSH public key
-  ansible.builtin.lineinfile:
-    path: "/home/{{ username }}/.ssh/authorized_keys"
-    line: "{{ pubkey }}"
-    create: true
-    owner: "{{ username }}"
-    group: "{{ username }}"
-    mode: "0600"
-  when: pubkey | length > 0

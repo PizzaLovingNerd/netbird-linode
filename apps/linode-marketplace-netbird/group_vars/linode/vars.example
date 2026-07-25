@@ -1,7 +1,6 @@
 ---
 username: netbirdadmin
 disable_root: false
-pubkey: ""
 domain: example.com
 subdomain: netbird
 acme_email: admin@example.com

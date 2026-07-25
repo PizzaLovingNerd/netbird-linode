@@ -51,12 +51,11 @@ Traefik container that handles public HTTPS and gRPC traffic.
   deployment.
 - **Disable root access over SSH:** Prevents direct root SSH logins when set to
   `Yes`.
-- **SSH public key:** An optional OpenSSH public key for the limited user.
-  Authorized keys injected into the Linode root account are also copied.
 
-If the limited user has at least one authorized key, the app disables SSH
-password authentication. Otherwise, password authentication remains enabled so
-the generated sudo credentials can be used.
+Select an account SSH key in the Linode creation form. Linode injects selected
+keys into the root account, and the app copies them to the limited sudo user.
+If the limited user receives at least one authorized key, the app disables SSH
+password authentication. Otherwise, password authentication remains enabled.
 
 ## Deployment
 

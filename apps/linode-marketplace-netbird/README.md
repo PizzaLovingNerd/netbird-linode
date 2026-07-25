@@ -36,11 +36,13 @@ Suggested plan: a Shared CPU plan with at least 2 GB RAM.
 | Linode API token | No | Creates the A record when the zone uses Linode DNS |
 | Limited sudo username | Yes | Administrative Linux account |
 | Disable root SSH | Yes | Selects whether SSH permits direct root login |
-| SSH public key | No | Adds a key to the limited sudo account |
 
 When the API token is omitted, the requested FQDN must already resolve to the
 new Linode's public IPv4 address. Provisioning waits for public DNS before
 starting Traefik so certificate issuance cannot silently fail.
+
+Select an account SSH key in the Linode creation form. Linode injects selected
+keys into the root account, and the app copies them to the limited sudo user.
 
 ## Network ports
 

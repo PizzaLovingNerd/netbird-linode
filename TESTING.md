@@ -36,7 +36,7 @@ Deploy the Account StackScript with:
 - a Shared CPU plan with at least 2 GB RAM
 - the test DNS zone and subdomain
 - a valid Let's Encrypt contact email
-- an SSH public key
+- an account SSH key selected in Linode's Security section
 - **Disable root access over SSH:** `Yes`
 
 If the DNS zone is hosted by Linode, provide the scoped API token. Otherwise,

@@ -14,7 +14,6 @@ set -Eeuo pipefail
 ## Linode/SSH security settings
 #<UDF name="user_name" label="Limited sudo username (lowercase letters, numbers, _ and -)" default="netbirdadmin">
 #<UDF name="disable_root" label="Disable root access over SSH?" oneOf="Yes,No" default="No">
-#<UDF name="pubkey" label="SSH public key for the limited sudo user (optional)" default="">
 
 readonly DEFAULT_GIT_REPO="https://github.com/PizzaLovingNerd/netbird-linode.git"
 readonly REPO_URL="${GIT_REPO:-${DEFAULT_GIT_REPO}}"
