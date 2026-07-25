@@ -1,6 +1,6 @@
 # Test the NetBird StackScript
 
-The meaningful end-to-end test is a new Ubuntu 24.04 Linode. The StackScript
+The meaningful end-to-end test is a new Ubuntu 26.04 Linode. The StackScript
 installs system packages, changes SSH and firewall policy, uses the instance's
 public IPv4 address, and requests a real TLS certificate, so it should not be
 run on an existing server.
@@ -25,14 +25,14 @@ hostname.
 2. Use a label such as `NetBird development test`.
 3. Paste the complete contents of
    `deployment_scripts/linode-marketplace-netbird/netbird-deploy.sh`.
-4. Select **Ubuntu 24.04 LTS** as the compatible image.
+4. Select **Ubuntu 26.04 LTS** and **Ubuntu 24.04 LTS** as compatible images.
 5. Keep the StackScript private while testing.
 
 ## 3. Deploy a disposable instance
 
 Deploy the Account StackScript with:
 
-- Ubuntu 24.04 LTS
+- Ubuntu 26.04 LTS
 - a Shared CPU plan with at least 2 GB RAM
 - the test DNS zone and subdomain
 - a valid Let's Encrypt contact email

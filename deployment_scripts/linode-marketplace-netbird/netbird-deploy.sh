@@ -39,7 +39,7 @@ run() {
   export DEBIAN_FRONTEND=noninteractive
 
   apt-get update
-  apt-get install -y git python3 python3-pip python3-venv
+  apt-get install -y git openssl python3 python3-pip python3-venv
 
   if [[ -e "${WORK_DIR}" ]]; then
     echo "[error] Refusing to overwrite existing work directory ${WORK_DIR}."

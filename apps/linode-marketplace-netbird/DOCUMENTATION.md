@@ -23,7 +23,7 @@ Traefik container that handles public HTTPS and gRPC traffic.
 
 ## Before deployment
 
-- Use Ubuntu 24.04 LTS.
+- Use Ubuntu 26.04 LTS. Ubuntu 24.04 LTS is also supported.
 - Choose a Shared CPU plan with at least 2 GB RAM.
 - Have an existing DNS zone and a valid email address.
 - To create DNS automatically, create a Linode API token with Domains

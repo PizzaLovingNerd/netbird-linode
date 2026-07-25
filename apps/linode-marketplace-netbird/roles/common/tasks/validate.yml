@@ -1,11 +1,10 @@
 ---
-- name: Require Ubuntu 24.04 LTS
+- name: Require a supported Ubuntu LTS release
   ansible.builtin.assert:
     that:
       - ansible_facts.distribution == 'Ubuntu'
-      - ansible_facts.distribution_version is version('24.04', '>=')
-      - ansible_facts.distribution_version is version('24.10', '<')
-    fail_msg: This Marketplace app supports Ubuntu 24.04 LTS only.
+      - ansible_facts.distribution_version in ['24.04', '26.04']
+    fail_msg: This Marketplace app supports Ubuntu 24.04 and 26.04 LTS only.
 
 - name: Validate the DNS zone
   ansible.builtin.assert:

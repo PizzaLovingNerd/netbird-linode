@@ -1,7 +1,8 @@
 # NetBird Linode One-Click App
 
 This repository contains a self-contained Linode Marketplace deployment for a
-single-node, self-hosted NetBird control plane on Ubuntu 24.04 LTS.
+single-node, self-hosted NetBird control plane on Ubuntu 26.04 LTS. Ubuntu
+24.04 LTS remains supported as a fallback.
 
 The deployment follows Linode's StackScript + Ansible convention. It installs
 Docker, creates a limited sudo user, configures UFW and Fail2ban, optionally
@@ -32,7 +33,7 @@ apps/linode-marketplace-netbird/
 1. In Cloud Manager, create an Account StackScript.
 2. Paste the contents of
    `deployment_scripts/linode-marketplace-netbird/netbird-deploy.sh`.
-3. Select Ubuntu 24.04 LTS as the compatible image.
+3. Select Ubuntu 26.04 LTS and Ubuntu 24.04 LTS as compatible images.
 4. Deploy the StackScript on a plan with at least 2 GB RAM.
 
 For a Marketplace monorepo submission, change `DEFAULT_GIT_REPO` to the target

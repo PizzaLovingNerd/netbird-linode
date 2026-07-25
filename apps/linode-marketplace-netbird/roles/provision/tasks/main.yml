@@ -50,6 +50,19 @@
     mode: "0600"
   no_log: true
 
+- name: Hash the generated sudo password
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - passwd
+      - -6
+      - -stdin
+    stdin: "{{ provision_generated_sudo_password }}"
+    stdin_add_newline: true
+  register: provision_generated_sudo_password_hash
+  changed_when: false
+  no_log: true
+
 - name: Create the limited sudo user
   ansible.builtin.user:
     name: "{{ username }}"
@@ -60,7 +73,7 @@
     groups:
       - sudo
     append: true
-    password: "{{ provision_generated_sudo_password | password_hash('sha512') }}"
+    password: "{{ provision_generated_sudo_password_hash.stdout }}"
     update_password: on_create
     state: present
   no_log: true

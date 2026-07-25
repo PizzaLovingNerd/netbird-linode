@@ -21,7 +21,8 @@ proxy.
 | Docker Engine | Current stable | Container runtime installed from Docker's Ubuntu repository |
 | Docker Compose | Current stable | Compose v2 plugin installed with Docker |
 
-Supported distribution: Ubuntu 24.04 LTS.
+Supported distributions: Ubuntu 26.04 LTS and Ubuntu 24.04 LTS. New
+deployments should use Ubuntu 26.04 LTS.
 
 Suggested plan: a Shared CPU plan with at least 2 GB RAM.
 
